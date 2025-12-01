@@ -26,6 +26,33 @@ app.get('/', (req, res) => {
     res.render('index', { tasks });
   });
 });
+// Add routes for tasks: GET all tasks, POST new task
+app.get('/tasks', (req, res) => {
+    db.getAllTasks((err, tasks) => {
+        if (err) {
+            res.status(500).send('Error retrieving tasks');
+            return;
+        }
+        res.render('tasks', { tasks });
+    });
+});
+
+app.post('/tasks', (req, res) => {
+    const { title, description, priority } = req.body;
+    
+    if (!title) {
+        return res.status(400).send('Title is required');
+    }
+
+    db.createTask(title, description || '', priority || 'medium', (err, id) => {
+        if (err) {
+            return res.status(500).send('Error creating task');
+        }
+        res.redirect('/tasks');
+    });
+});
+
+
 
 // API Routes
 app.post('/api/tasks', (req, res) => {
