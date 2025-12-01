@@ -33,7 +33,7 @@ app.get('/tasks', (req, res) => {
             res.status(500).send('Error retrieving tasks');
             return;
         }
-        res.render('tasks', { tasks });
+        res.render('index', { tasks });
     });
 });
 
