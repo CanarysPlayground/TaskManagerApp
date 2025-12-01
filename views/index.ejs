@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Manager</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>📋 Task Manager</h1>
+        
+        <div class="add-task-section">
+            <h2>Add New Task</h2>
+            <form id="taskForm">
+                <input type="text" id="title" placeholder="Task title" required>
+                <textarea id="description" placeholder="Task description (optional)"></textarea>
+                <select id="priority">
+                    <option value="low">Low Priority</option>
+                    <option value="medium" selected>Medium Priority</option>
+                    <option value="high">High Priority</option>
+                </select>
+                <button type="submit">Add Task</button>
+            </form>
+        </div>
+
+        <div class="tasks-section">
+            <h2>Tasks</h2>
+            <div id="tasksList" class="tasks-list">
+                <% tasks.forEach(task => { %>
+                    <div class="task-item <%= task.completed ? 'completed' : '' %>" data-id="<%= task.id %>">
+                        <input type="checkbox" class="task-checkbox" <%= task.completed ? 'checked' : '' %>>
+                        <div class="task-content">
+                            <h3><%= task.title %></h3>
+                            <p><%= task.description %></p>
+                            <span class="priority <%= task.priority %>"><%= task.priority %></span>
+                            <small><%= new Date(task.created_at).toLocaleDateString() %></small>
+                        </div>
+                        <button class="delete-btn">Delete</button>
+                    </div>
+                <% }); %>
+            </div>
+            <% if (tasks.length === 0) { %>
+                <p class="no-tasks">No tasks yet. Create one to get started!</p>
+            <% } %>
+        </div>
+    </div>
+
+    <script src="/script.js"></script>
+</body>
+</html>
