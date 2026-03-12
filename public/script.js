@@ -78,6 +78,29 @@ document.addEventListener('click', async (e) => {
             }
         }
     }
+
+    if (e.target.classList.contains('star')) {
+        const taskItem = e.target.closest('.task-item');
+        const taskId = taskItem.dataset.id;
+        const rating = parseInt(e.target.dataset.rating);
+
+        try {
+            const response = await fetch(`/api/tasks/${taskId}/rating`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rating })
+            });
+
+            if (response.ok) {
+                const stars = taskItem.querySelectorAll('.star');
+                stars.forEach((star, idx) => {
+                    star.classList.toggle('filled', idx < rating);
+                });
+            }
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    }
 });
 
 async function loadTasks() {
@@ -99,6 +122,11 @@ async function loadTasks() {
                     <h3>${task.title}</h3>
                     <p>${task.description}</p>
                     <span class="priority ${task.priority}">${task.priority}</span>
+                    <div class="star-rating">
+                        ${[1, 2, 3, 4, 5].map(star =>
+                            `<span class="star ${star <= task.rating ? 'filled' : ''}" data-rating="${star}">★</span>`
+                        ).join('')}
+                    </div>
                     <small>${new Date(task.created_at).toLocaleDateString()}</small>
                 </div>
                 <button class="delete-btn">Delete</button>

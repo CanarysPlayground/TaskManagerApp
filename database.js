@@ -17,6 +17,12 @@ const initialize = () => {
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    // Add rating column for existing databases that predate this feature
+    db.run(`ALTER TABLE tasks ADD COLUMN rating INTEGER DEFAULT 0`, (err) => {
+      if (err && !err.message.includes('duplicate column name')) {
+        console.error('Error adding rating column:', err);
+      }
+    });
   });
 };
 

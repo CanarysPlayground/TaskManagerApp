@@ -51,13 +51,60 @@ app.get('/api/tasks/:id', (req, res) => {
 });
 
 app.put('/api/tasks/:id', (req, res) => {
-  const { title, description, priority, completed } = req.body;
+  const { title, description, priority, completed, rating } = req.body;
 
-  db.updateTask(req.params.id, title, description, priority, completed, (err) => {
+  if (rating !== undefined) {
+    const ratingNum = parseInt(rating);
+    if (isNaN(ratingNum) || ratingNum < 0 || ratingNum > 5) {
+      return res.status(400).json({ error: 'Rating must be between 0 and 5' });
+    }
+  }
+
+  db.updateTask(req.params.id, title, description, priority, completed, rating !== undefined ? parseInt(rating) : undefined, (err) => {
     if (err) {
       return res.status(500).json({ error: 'Error updating task' });
     }
     res.json({ message: 'Task updated successfully' });
+  });
+});
+
+app.get('/api/tasks/:id/rating', (req, res) => {
+  if (!req.params.id || isNaN(parseInt(req.params.id))) {
+    return res.status(400).json({ error: 'Invalid task ID' });
+  }
+
+  db.getTaskRating(req.params.id, (err, result) => {
+    if (err) {
+      return res.status(500).json({ error: 'Error retrieving task rating' });
+    }
+    if (!result) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    res.json({ rating: result.rating });
+  });
+});
+
+app.put('/api/tasks/:id/rating', (req, res) => {
+  const { rating } = req.body;
+
+  if (!req.params.id || isNaN(parseInt(req.params.id))) {
+    return res.status(400).json({ error: 'Invalid task ID' });
+  }
+
+  if (rating === undefined || rating === null) {
+    return res.status(400).json({ error: 'Rating is required' });
+  }
+
+  const ratingNum = parseInt(rating);
+  if (isNaN(ratingNum) || ratingNum < 0 || ratingNum > 5) {
+    return res.status(400).json({ error: 'Rating must be between 0 and 5' });
+  }
+
+  db.setTaskRating(req.params.id, ratingNum, (err) => {
+    if (err) {
+      return res.status(500).json({ error: 'Error updating task rating' });
+    }
+    res.json({ message: 'Task rating updated successfully' });
   });
 });
 
@@ -374,7 +421,7 @@ describe('Task Manager API Routes', () => {
         completed: 1
       };
 
-      db.updateTask.mockImplementation((id, title, description, priority, completed, callback) => {
+      db.updateTask.mockImplementation((id, title, description, priority, completed, rating, callback) => {
         callback(null);
       });
 
@@ -391,6 +438,7 @@ describe('Task Manager API Routes', () => {
             updateData.description,
             updateData.priority,
             updateData.completed,
+            undefined,
             expect.any(Function)
           );
           done();
@@ -400,7 +448,7 @@ describe('Task Manager API Routes', () => {
     test('should update only title', (done) => {
       const updateData = { title: 'Only title updated' };
 
-      db.updateTask.mockImplementation((id, title, description, priority, completed, callback) => {
+      db.updateTask.mockImplementation((id, title, description, priority, completed, rating, callback) => {
         callback(null);
       });
 
@@ -418,7 +466,7 @@ describe('Task Manager API Routes', () => {
     test('should mark task as completed', (done) => {
       const updateData = { completed: 1 };
 
-      db.updateTask.mockImplementation((id, title, description, priority, completed, callback) => {
+      db.updateTask.mockImplementation((id, title, description, priority, completed, rating, callback) => {
         expect(completed).toBe(1);
         callback(null);
       });
@@ -441,7 +489,7 @@ describe('Task Manager API Routes', () => {
         completed: 0
       };
 
-      db.updateTask.mockImplementation((id, title, description, priority, completed, callback) => {
+      db.updateTask.mockImplementation((id, title, description, priority, completed, rating, callback) => {
         callback(new Error('Database error'));
       });
 
@@ -464,7 +512,7 @@ describe('Task Manager API Routes', () => {
         completed: 1
       };
 
-      db.updateTask.mockImplementation((id, title, description, priority, completed, callback) => {
+      db.updateTask.mockImplementation((id, title, description, priority, completed, rating, callback) => {
         callback(null);
       });
 
@@ -567,6 +615,162 @@ describe('Task Manager API Routes', () => {
               expect(db.createTask).toHaveBeenCalled();
               done();
             });
+        });
+    });
+  });
+
+  // GET /api/tasks/:id/rating - Get Task Rating Tests
+  describe('GET /api/tasks/:id/rating - Get Task Rating', () => {
+    test('should retrieve task rating', (done) => {
+      db.getTaskRating.mockImplementation((id, callback) => {
+        callback(null, { rating: 4 });
+      });
+
+      request(app)
+        .get('/api/tasks/1/rating')
+        .expect(200)
+        .end((err, res) => {
+          if (err) return done(err);
+          expect(res.body.rating).toBe(4);
+          expect(db.getTaskRating).toHaveBeenCalledWith('1', expect.any(Function));
+          done();
+        });
+    });
+
+    test('should return 404 if task not found', (done) => {
+      db.getTaskRating.mockImplementation((id, callback) => {
+        callback(null, null);
+      });
+
+      request(app)
+        .get('/api/tasks/999/rating')
+        .expect(404)
+        .end((err, res) => {
+          if (err) return done(err);
+          expect(res.body.error).toBe('Task not found');
+          done();
+        });
+    });
+
+    test('should return 500 if database fails', (done) => {
+      db.getTaskRating.mockImplementation((id, callback) => {
+        callback(new Error('Database error'), null);
+      });
+
+      request(app)
+        .get('/api/tasks/1/rating')
+        .expect(500)
+        .end((err, res) => {
+          if (err) return done(err);
+          expect(res.body.error).toBe('Error retrieving task rating');
+          done();
+        });
+    });
+  });
+
+  // PUT /api/tasks/:id/rating - Set Task Rating Tests
+  describe('PUT /api/tasks/:id/rating - Set Task Rating', () => {
+    test('should set task rating successfully', (done) => {
+      db.setTaskRating.mockImplementation((id, rating, callback) => {
+        callback(null);
+      });
+
+      request(app)
+        .put('/api/tasks/1/rating')
+        .send({ rating: 5 })
+        .expect(200)
+        .end((err, res) => {
+          if (err) return done(err);
+          expect(res.body.message).toBe('Task rating updated successfully');
+          expect(db.setTaskRating).toHaveBeenCalledWith('1', 5, expect.any(Function));
+          done();
+        });
+    });
+
+    test('should return 400 if rating is missing', (done) => {
+      request(app)
+        .put('/api/tasks/1/rating')
+        .send({})
+        .expect(400)
+        .end((err, res) => {
+          if (err) return done(err);
+          expect(res.body.error).toBe('Rating is required');
+          done();
+        });
+    });
+
+    test('should return 500 if database fails', (done) => {
+      db.setTaskRating.mockImplementation((id, rating, callback) => {
+        callback(new Error('Database error'));
+      });
+
+      request(app)
+        .put('/api/tasks/1/rating')
+        .send({ rating: 3 })
+        .expect(500)
+        .end((err, res) => {
+          if (err) return done(err);
+          expect(res.body.error).toBe('Error updating task rating');
+          done();
+        });
+    });
+
+    test('should call setTaskRating with correct parameters', (done) => {
+      db.setTaskRating.mockImplementation((id, rating, callback) => {
+        expect(id).toBe('2');
+        expect(rating).toBe(3);
+        callback(null);
+      });
+
+      request(app)
+        .put('/api/tasks/2/rating')
+        .send({ rating: 3 })
+        .expect(200)
+        .end((err, res) => {
+          if (err) return done(err);
+          expect(db.setTaskRating).toHaveBeenCalledWith('2', 3, expect.any(Function));
+          done();
+        });
+    });
+
+    test('should return 400 if rating is out of range', (done) => {
+      request(app)
+        .put('/api/tasks/1/rating')
+        .send({ rating: 6 })
+        .expect(400)
+        .end((err, res) => {
+          if (err) return done(err);
+          expect(res.body.error).toBe('Rating must be between 0 and 5');
+          done();
+        });
+    });
+
+    test('should return 400 if rating is negative', (done) => {
+      request(app)
+        .put('/api/tasks/1/rating')
+        .send({ rating: -1 })
+        .expect(400)
+        .end((err, res) => {
+          if (err) return done(err);
+          expect(res.body.error).toBe('Rating must be between 0 and 5');
+          done();
+        });
+    });
+
+    test('should accept rating of 0 to clear rating', (done) => {
+      db.setTaskRating.mockImplementation((id, rating, callback) => {
+        expect(rating).toBe(0);
+        callback(null);
+      });
+
+      request(app)
+        .put('/api/tasks/1/rating')
+        .send({ rating: 0 })
+        .expect(200)
+        .end((err, res) => {
+          if (err) return done(err);
+          expect(res.body.message).toBe('Task rating updated successfully');
+          done();
         });
     });
   });

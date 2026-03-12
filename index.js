@@ -57,6 +57,16 @@ const validateCompleted = (completed) => {
   return { valid: true };
 };
 
+const validateRating = (rating) => {
+  if (rating !== undefined && rating !== null) {
+    const ratingNum = parseInt(rating);
+    if (isNaN(ratingNum) || ratingNum < 0 || ratingNum > 5) {
+      return { valid: false, error: 'Rating must be between 0 and 5' };
+    }
+  }
+  return { valid: true };
+};
+
 const validateTaskId = (id) => {
   if (!id || isNaN(parseInt(id))) {
     return { valid: false, error: 'Invalid task ID' };
@@ -188,7 +198,7 @@ app.get('/api/tasks/:id', (req, res) => {
 });
 
 app.put('/api/tasks/:id', (req, res) => {
-  const { title, description, priority, completed } = req.body;
+  const { title, description, priority, completed, rating } = req.body;
 
   // Validate task ID
   const idValidation = validateTaskId(req.params.id);
@@ -197,8 +207,8 @@ app.put('/api/tasks/:id', (req, res) => {
   }
 
   // Validate at least one field is provided
-  if (!title && !description && !priority && completed === undefined) {
-    return res.status(400).json({ error: 'At least one field (title, description, priority, or completed) must be provided' });
+  if (!title && !description && !priority && completed === undefined && rating === undefined) {
+    return res.status(400).json({ error: 'At least one field (title, description, priority, completed, or rating) must be provided' });
   }
 
   // Validate title if provided
@@ -233,12 +243,68 @@ app.put('/api/tasks/:id', (req, res) => {
     }
   }
 
-  db.updateTask(req.params.id, title, description, priority, completed, (err) => {
+  // Validate rating if provided
+  if (rating !== undefined) {
+    const ratingValidation = validateRating(rating);
+    if (!ratingValidation.valid) {
+      return res.status(400).json({ error: ratingValidation.error });
+    }
+  }
+
+  db.updateTask(req.params.id, title, description, priority, completed, rating !== undefined ? parseInt(rating) : undefined, (err) => {
     if (err) {
       console.error('Error updating task:', err);
       return res.status(500).json({ error: 'Error updating task', details: err.message });
     }
     res.json({ message: 'Task updated successfully' });
+  });
+});
+
+app.get('/api/tasks/:id/rating', (req, res) => {
+  // Validate task ID
+  const idValidation = validateTaskId(req.params.id);
+  if (!idValidation.valid) {
+    return res.status(400).json({ error: idValidation.error });
+  }
+
+  db.getTaskRating(req.params.id, (err, result) => {
+    if (err) {
+      console.error('Error retrieving task rating:', err);
+      return res.status(500).json({ error: 'Error retrieving task rating', details: err.message });
+    }
+    if (!result) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    res.json({ rating: result.rating });
+  });
+});
+
+app.put('/api/tasks/:id/rating', (req, res) => {
+  const { rating } = req.body;
+
+  // Validate task ID
+  const idValidation = validateTaskId(req.params.id);
+  if (!idValidation.valid) {
+    return res.status(400).json({ error: idValidation.error });
+  }
+
+  // Validate rating is provided
+  if (rating === undefined || rating === null) {
+    return res.status(400).json({ error: 'Rating is required' });
+  }
+
+  // Validate rating value
+  const ratingValidation = validateRating(rating);
+  if (!ratingValidation.valid) {
+    return res.status(400).json({ error: ratingValidation.error });
+  }
+
+  db.setTaskRating(req.params.id, parseInt(rating), (err) => {
+    if (err) {
+      console.error('Error updating task rating:', err);
+      return res.status(500).json({ error: 'Error updating task rating', details: err.message });
+    }
+    res.json({ message: 'Task rating updated successfully' });
   });
 });
 
