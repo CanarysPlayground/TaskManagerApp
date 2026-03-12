@@ -12,6 +12,7 @@ const initialize = () => {
         description TEXT,
         priority TEXT DEFAULT 'medium',
         completed INTEGER DEFAULT 0,
+        rating INTEGER DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
@@ -36,18 +37,28 @@ const getTaskById = (id, callback) => {
   db.get(sql, [id], callback);
 };
 
-const updateTask = (id, title, description, priority, completed, callback) => {
+const updateTask = (id, title, description, priority, completed, rating, callback) => {
   const sql = `
     UPDATE tasks 
-    SET title = ?, description = ?, priority = ?, completed = ?, updated_at = CURRENT_TIMESTAMP
+    SET title = ?, description = ?, priority = ?, completed = ?, rating = ?, updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
   `;
-  db.run(sql, [title, description, priority, completed, id], callback);
+  db.run(sql, [title, description, priority, completed, rating, id], callback);
 };
 
 const deleteTask = (id, callback) => {
   const sql = `DELETE FROM tasks WHERE id = ?`;
   db.run(sql, [id], callback);
+};
+
+const setTaskRating = (id, rating, callback) => {
+  const sql = `UPDATE tasks SET rating = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
+  db.run(sql, [rating, id], callback);
+};
+
+const getTaskRating = (id, callback) => {
+  const sql = `SELECT rating FROM tasks WHERE id = ?`;
+  db.get(sql, [id], callback);
 };
 
 const closeDatabase = () => {
@@ -61,5 +72,7 @@ module.exports = {
   getTaskById,
   updateTask,
   deleteTask,
+  setTaskRating,
+  getTaskRating,
   closeDatabase
 };
