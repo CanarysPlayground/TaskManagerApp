@@ -34,6 +34,11 @@
                             <h3><%= task.title %></h3>
                             <p><%= task.description %></p>
                             <span class="priority <%= task.priority %>"><%= task.priority %></span>
+                            <div class="star-rating">
+                                <% for (let s = 1; s <= 5; s++) { %>
+                                    <span class="star <%= s <= task.rating ? 'filled' : '' %>" data-rating="<%= s %>">★</span>
+                                <% } %>
+                            </div>
                             <small><%= new Date(task.created_at).toLocaleDateString() %></small>
                         </div>
                         <button class="delete-btn">Delete</button>
