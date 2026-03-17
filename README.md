@@ -8,6 +8,7 @@ A simple Node.js Express app for managing tasks with SQLite database.
 - ✅ Mark tasks as completed
 - ✅ Set task priority (Low, Medium, High)
 - ✅ Task descriptions
+- ✅ Rate each task (1-5 stars)
 - ✅ Clean and responsive UI
 - ✅ RESTful API
 
@@ -66,7 +67,21 @@ Body: {
   "title": "Updated title",
   "description": "Updated description",
   "priority": "high",
-  "completed": 1 // 0 or 1
+  "completed": 1, // 0 or 1
+  "rating": 4 // 0 to 5
+}
+```
+
+### Get task rating
+```
+GET /api/tasks/:id/rating
+```
+
+### Set task rating
+```
+PUT /api/tasks/:id/rating
+Body: {
+  "rating": 5 // 0 to 5
 }
 ```
 
