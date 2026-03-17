@@ -3,7 +3,15 @@ const express = require('express');
 const bodyParser = require('body-parser');
 
 // Mock the database module
-jest.mock('../database');
+jest.mock('../database', () => ({
+  initialize: jest.fn(),
+  createTask: jest.fn(),
+  getAllTasks: jest.fn(),
+  getTaskById: jest.fn(),
+  updateTask: jest.fn(),
+  deleteTask: jest.fn(),
+  closeDatabase: jest.fn()
+}));
 const db = require('../database');
 
 // Create app for testing
@@ -15,17 +23,17 @@ app.set('views', './views');
 
 // Routes from index.js
 app.post('/api/tasks', (req, res) => {
-  const { title, description, priority } = req.body;
+  const { title, description, priority, label } = req.body;
   
   if (!title) {
     return res.status(400).json({ error: 'Title is required' });
   }
 
-  db.createTask(title, description || '', priority || 'medium', (err, id) => {
+  db.createTask(title, description || '', priority || 'medium', label || '', (err, id) => {
     if (err) {
       return res.status(500).json({ error: 'Error creating task' });
     }
-    res.json({ id, title, description, priority, completed: 0, created_at: new Date().toISOString() });
+    res.json({ id, title, description, priority, label: label || '', completed: 0, created_at: new Date().toISOString() });
   });
 });
 
@@ -51,9 +59,9 @@ app.get('/api/tasks/:id', (req, res) => {
 });
 
 app.put('/api/tasks/:id', (req, res) => {
-  const { title, description, priority, completed } = req.body;
+  const { title, description, priority, completed, label } = req.body;
 
-  db.updateTask(req.params.id, title, description, priority, completed, (err) => {
+  db.updateTask(req.params.id, title, description, priority, completed, label, (err) => {
     if (err) {
       return res.status(500).json({ error: 'Error updating task' });
     }
@@ -85,7 +93,7 @@ describe('Task Manager API Routes', () => {
         priority: 'high'
       };
 
-      db.createTask.mockImplementation((title, description, priority, callback) => {
+      db.createTask.mockImplementation((title, description, priority, label, callback) => {
         callback(null, 1);
       });
 
@@ -127,7 +135,7 @@ describe('Task Manager API Routes', () => {
         description: 'Math and Science'
       };
 
-      db.createTask.mockImplementation((title, description, priority, callback) => {
+      db.createTask.mockImplementation((title, description, priority, label, callback) => {
         expect(priority).toBe('medium');
         callback(null, 2);
       });
@@ -149,7 +157,7 @@ describe('Task Manager API Routes', () => {
         priority: 'low'
       };
 
-      db.createTask.mockImplementation((title, description, priority, callback) => {
+      db.createTask.mockImplementation((title, description, priority, label, callback) => {
         expect(description).toBe('');
         callback(null, 3);
       });
@@ -172,7 +180,7 @@ describe('Task Manager API Routes', () => {
         priority: 'low'
       };
 
-      db.createTask.mockImplementation((title, description, priority, callback) => {
+      db.createTask.mockImplementation((title, description, priority, label, callback) => {
         callback(new Error('Database error'), null);
       });
 
@@ -194,7 +202,7 @@ describe('Task Manager API Routes', () => {
         priority: 'high'
       };
 
-      db.createTask.mockImplementation((title, description, priority, callback) => {
+      db.createTask.mockImplementation((title, description, priority, label, callback) => {
         callback(null, 4);
       });
 
@@ -208,6 +216,7 @@ describe('Task Manager API Routes', () => {
             newTask.title,
             newTask.description,
             newTask.priority,
+            '',
             expect.any(Function)
           );
           done();
@@ -374,7 +383,7 @@ describe('Task Manager API Routes', () => {
         completed: 1
       };
 
-      db.updateTask.mockImplementation((id, title, description, priority, completed, callback) => {
+      db.updateTask.mockImplementation((id, title, description, priority, completed, label, callback) => {
         callback(null);
       });
 
@@ -391,6 +400,7 @@ describe('Task Manager API Routes', () => {
             updateData.description,
             updateData.priority,
             updateData.completed,
+            undefined,
             expect.any(Function)
           );
           done();
@@ -400,7 +410,7 @@ describe('Task Manager API Routes', () => {
     test('should update only title', (done) => {
       const updateData = { title: 'Only title updated' };
 
-      db.updateTask.mockImplementation((id, title, description, priority, completed, callback) => {
+      db.updateTask.mockImplementation((id, title, description, priority, completed, label, callback) => {
         callback(null);
       });
 
@@ -418,7 +428,7 @@ describe('Task Manager API Routes', () => {
     test('should mark task as completed', (done) => {
       const updateData = { completed: 1 };
 
-      db.updateTask.mockImplementation((id, title, description, priority, completed, callback) => {
+      db.updateTask.mockImplementation((id, title, description, priority, completed, label, callback) => {
         expect(completed).toBe(1);
         callback(null);
       });
@@ -441,7 +451,7 @@ describe('Task Manager API Routes', () => {
         completed: 0
       };
 
-      db.updateTask.mockImplementation((id, title, description, priority, completed, callback) => {
+      db.updateTask.mockImplementation((id, title, description, priority, completed, label, callback) => {
         callback(new Error('Database error'));
       });
 
@@ -464,7 +474,7 @@ describe('Task Manager API Routes', () => {
         completed: 1
       };
 
-      db.updateTask.mockImplementation((id, title, description, priority, completed, callback) => {
+      db.updateTask.mockImplementation((id, title, description, priority, completed, label, callback) => {
         callback(null);
       });
 
@@ -552,7 +562,7 @@ describe('Task Manager API Routes', () => {
         callback(null, []);
       });
 
-      db.createTask.mockImplementation((title, description, priority, callback) => {
+      db.createTask.mockImplementation((title, description, priority, label, callback) => {
         callback(null, 1);
       });
 
@@ -567,6 +577,103 @@ describe('Task Manager API Routes', () => {
               expect(db.createTask).toHaveBeenCalled();
               done();
             });
+        });
+    });
+  });
+
+  // Label Feature Tests
+  describe('Label Feature', () => {
+    test('should create a task with a label', (done) => {
+      const newTask = {
+        title: 'Labelled task',
+        description: 'Has a label',
+        priority: 'medium',
+        label: 'Work'
+      };
+
+      db.createTask.mockImplementation((title, description, priority, label, callback) => {
+        expect(label).toBe('Work');
+        callback(null, 10);
+      });
+
+      request(app)
+        .post('/api/tasks')
+        .send(newTask)
+        .expect(200)
+        .end((err, res) => {
+          if (err) return done(err);
+          expect(res.body.label).toBe('Work');
+          expect(db.createTask).toHaveBeenCalledWith(
+            newTask.title,
+            newTask.description,
+            newTask.priority,
+            newTask.label,
+            expect.any(Function)
+          );
+          done();
+        });
+    });
+
+    test('should use empty string as default label if not provided', (done) => {
+      const newTask = {
+        title: 'No label task',
+        description: 'Without label',
+        priority: 'low'
+      };
+
+      db.createTask.mockImplementation((title, description, priority, label, callback) => {
+        expect(label).toBe('');
+        callback(null, 11);
+      });
+
+      request(app)
+        .post('/api/tasks')
+        .send(newTask)
+        .expect(200)
+        .end((err, res) => {
+          if (err) return done(err);
+          expect(res.body.label).toBe('');
+          done();
+        });
+    });
+
+    test('should update a task label', (done) => {
+      const updateData = { label: 'Personal' };
+
+      db.updateTask.mockImplementation((id, title, description, priority, completed, label, callback) => {
+        expect(label).toBe('Personal');
+        callback(null);
+      });
+
+      request(app)
+        .put('/api/tasks/1')
+        .send(updateData)
+        .expect(200)
+        .end((err, res) => {
+          if (err) return done(err);
+          expect(res.body.message).toBe('Task updated successfully');
+          done();
+        });
+    });
+
+    test('should include label in retrieved task list', (done) => {
+      const mockTasks = [
+        { id: 1, title: 'Task 1', description: 'Desc 1', priority: 'high', completed: 0, label: 'Work', created_at: '2025-12-01' },
+        { id: 2, title: 'Task 2', description: 'Desc 2', priority: 'low', completed: 1, label: '', created_at: '2025-12-02' }
+      ];
+
+      db.getAllTasks.mockImplementation((callback) => {
+        callback(null, mockTasks);
+      });
+
+      request(app)
+        .get('/api/tasks')
+        .expect(200)
+        .end((err, res) => {
+          if (err) return done(err);
+          expect(res.body[0].label).toBe('Work');
+          expect(res.body[1].label).toBe('');
+          done();
         });
     });
   });

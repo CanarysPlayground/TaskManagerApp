@@ -167,6 +167,18 @@ h2 {
     color: #721c24;
 }
 
+.label-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.75em;
+    font-weight: bold;
+    margin-right: 10px;
+    background: #e2e3f1;
+    color: #3d3d8a;
+    text-transform: uppercase;
+}
+
 .task-content small {
     color: #999;
     font-size: 0.8em;

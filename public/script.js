@@ -4,6 +4,7 @@ document.getElementById('taskForm').addEventListener('submit', async (e) => {
     const title = document.getElementById('title').value;
     const description = document.getElementById('description').value;
     const priority = document.getElementById('priority').value;
+    const label = document.getElementById('label').value;
 
     try {
         const response = await fetch('/api/tasks', {
@@ -11,7 +12,7 @@ document.getElementById('taskForm').addEventListener('submit', async (e) => {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ title, description, priority })
+            body: JSON.stringify({ title, description, priority, label })
         });
 
         if (response.ok) {
@@ -99,6 +100,7 @@ async function loadTasks() {
                     <h3>${task.title}</h3>
                     <p>${task.description}</p>
                     <span class="priority ${task.priority}">${task.priority}</span>
+                    ${task.label ? `<span class="label-badge">${task.label}</span>` : ''}
                     <small>${new Date(task.created_at).toLocaleDateString()}</small>
                 </div>
                 <button class="delete-btn">Delete</button>
