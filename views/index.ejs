@@ -34,6 +34,20 @@
                             <h3><%= task.title %></h3>
                             <p><%= task.description %></p>
                             <span class="priority <%= task.priority %>"><%= task.priority %></span>
+                            <div class="rating-row">
+                                <span class="rating-label">Rating:</span>
+                                <div class="star-rating" role="radiogroup" aria-label="Rate task">
+                                    <% for (let s = 1; s <= 5; s++) { %>
+                                        <button
+                                            type="button"
+                                            class="star <%= s <= task.rating ? 'filled' : '' %>"
+                                            data-rating="<%= s %>"
+                                            aria-label="Set rating to <%= s %> star<%= s > 1 ? 's' : '' %>"
+                                        >★</button>
+                                    <% } %>
+                                </div>
+                                <small class="rating-value"><%= task.rating ? `${task.rating}/5` : 'Unrated' %></small>
+                            </div>
                             <small><%= new Date(task.created_at).toLocaleDateString() %></small>
                         </div>
                         <button class="delete-btn">Delete</button>

@@ -1,0 +1,4 @@
+node_modules/
+tasks.db
+*.log
+nohup.out

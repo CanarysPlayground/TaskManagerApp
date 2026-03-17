@@ -1,3 +1,34 @@
+const getRatingLabel = (rating) => {
+    return rating > 0 ? `${rating}/5` : 'Unrated';
+};
+
+const renderStars = (rating) => {
+    return [1, 2, 3, 4, 5].map((star) => {
+        const filledClass = star <= rating ? 'filled' : '';
+        const starText = star === 1 ? 'star' : 'stars';
+        return `
+            <button
+                type="button"
+                class="star ${filledClass}"
+                data-rating="${star}"
+                aria-label="Set rating to ${star} ${starText}"
+            >★</button>
+        `;
+    }).join('');
+};
+
+const updateRatingDisplay = (taskItem, rating) => {
+    const stars = taskItem.querySelectorAll('.star');
+    stars.forEach((star, idx) => {
+        star.classList.toggle('filled', idx < rating);
+    });
+
+    const ratingValue = taskItem.querySelector('.rating-value');
+    if (ratingValue) {
+        ratingValue.textContent = getRatingLabel(rating);
+    }
+};
+
 document.getElementById('taskForm').addEventListener('submit', async (e) => {
     e.preventDefault();
 
@@ -78,6 +109,27 @@ document.addEventListener('click', async (e) => {
             }
         }
     }
+
+    const starButton = e.target.closest('.star');
+    if (starButton) {
+        const taskItem = starButton.closest('.task-item');
+        const taskId = taskItem.dataset.id;
+        const rating = parseInt(starButton.dataset.rating, 10);
+
+        try {
+            const response = await fetch(`/api/tasks/${taskId}/rating`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rating })
+            });
+
+            if (response.ok) {
+                updateRatingDisplay(taskItem, rating);
+            }
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    }
 });
 
 async function loadTasks() {
@@ -99,6 +151,13 @@ async function loadTasks() {
                     <h3>${task.title}</h3>
                     <p>${task.description}</p>
                     <span class="priority ${task.priority}">${task.priority}</span>
+                    <div class="rating-row">
+                        <span class="rating-label">Rating:</span>
+                        <div class="star-rating" role="radiogroup" aria-label="Rate task">
+                            ${renderStars(task.rating || 0)}
+                        </div>
+                        <small class="rating-value">${getRatingLabel(task.rating || 0)}</small>
+                    </div>
                     <small>${new Date(task.created_at).toLocaleDateString()}</small>
                 </div>
                 <button class="delete-btn">Delete</button>
