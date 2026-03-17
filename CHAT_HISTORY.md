@@ -15,4 +15,4 @@ Issue created successfully.
 ## 2026-03-17
 
 ### User
-create a md file and ad the chat history to store it in a file
+create a md file and add the chat history to store it in a file
