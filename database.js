@@ -12,16 +12,22 @@ const initialize = () => {
         description TEXT,
         priority TEXT DEFAULT 'medium',
         completed INTEGER DEFAULT 0,
+        label TEXT DEFAULT '',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    db.run(`ALTER TABLE tasks ADD COLUMN label TEXT DEFAULT ''`, (err) => {
+      if (err && !err.message.includes('duplicate column name')) {
+        console.error('Error adding label column:', err);
+      }
+    });
   });
 };
 
-const createTask = (title, description, priority, callback) => {
-  const sql = `INSERT INTO tasks (title, description, priority) VALUES (?, ?, ?)`;
-  db.run(sql, [title, description, priority], function(err) {
+const createTask = (title, description, priority, label, callback) => {
+  const sql = `INSERT INTO tasks (title, description, priority, label) VALUES (?, ?, ?, ?)`;
+  db.run(sql, [title, description, priority, label], function(err) {
     callback(err, this.lastID);
   });
 };
@@ -36,13 +42,13 @@ const getTaskById = (id, callback) => {
   db.get(sql, [id], callback);
 };
 
-const updateTask = (id, title, description, priority, completed, callback) => {
+const updateTask = (id, title, description, priority, completed, label, callback) => {
   const sql = `
     UPDATE tasks 
-    SET title = ?, description = ?, priority = ?, completed = ?, updated_at = CURRENT_TIMESTAMP
+    SET title = ?, description = ?, priority = ?, completed = ?, label = ?, updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
   `;
-  db.run(sql, [title, description, priority, completed, id], callback);
+  db.run(sql, [title, description, priority, completed, label, id], callback);
 };
 
 const deleteTask = (id, callback) => {

@@ -57,6 +57,16 @@ const validateCompleted = (completed) => {
   return { valid: true };
 };
 
+const validateLabel = (label) => {
+  if (label && typeof label !== 'string') {
+    return { valid: false, error: 'Label must be a string' };
+  }
+  if (label && label.length > 50) {
+    return { valid: false, error: 'Label cannot exceed 50 characters' };
+  }
+  return { valid: true };
+};
+
 const validateTaskId = (id) => {
   if (!id || isNaN(parseInt(id))) {
     return { valid: false, error: 'Invalid task ID' };
@@ -89,7 +99,7 @@ app.get('/tasks', (req, res) => {
 });
 
 app.post('/tasks', (req, res) => {
-    const { title, description, priority } = req.body;
+    const { title, description, priority, label } = req.body;
     
     // Validate title
     const titleValidation = validateTitle(title);
@@ -109,7 +119,13 @@ app.post('/tasks', (req, res) => {
         return res.status(400).render('error', { message: priorityValidation.error });
     }
 
-    db.createTask(title.trim(), description ? description.trim() : '', priority || 'medium', (err, id) => {
+    // Validate label
+    const labelValidation = validateLabel(label);
+    if (!labelValidation.valid) {
+        return res.status(400).render('error', { message: labelValidation.error });
+    }
+
+    db.createTask(title.trim(), description ? description.trim() : '', priority || 'medium', label ? label.trim() : '', (err, id) => {
         if (err) {
             console.error('Error creating task:', err);
             return res.status(500).render('error', { message: 'Error creating task' });
@@ -122,7 +138,7 @@ app.post('/tasks', (req, res) => {
 
 // API Routes
 app.post('/api/tasks', (req, res) => {
-  const { title, description, priority } = req.body;
+  const { title, description, priority, label } = req.body;
   
   // Validate title
   const titleValidation = validateTitle(title);
@@ -142,7 +158,13 @@ app.post('/api/tasks', (req, res) => {
     return res.status(400).json({ error: priorityValidation.error });
   }
 
-  db.createTask(title.trim(), description ? description.trim() : '', priority || 'medium', (err, id) => {
+  // Validate label
+  const labelValidation = validateLabel(label);
+  if (!labelValidation.valid) {
+    return res.status(400).json({ error: labelValidation.error });
+  }
+
+  db.createTask(title.trim(), description ? description.trim() : '', priority || 'medium', label ? label.trim() : '', (err, id) => {
     if (err) {
       console.error('Error creating task:', err);
       return res.status(500).json({ error: 'Error creating task', details: err.message });
@@ -151,7 +173,8 @@ app.post('/api/tasks', (req, res) => {
       id, 
       title: title.trim(), 
       description: description ? description.trim() : '', 
-      priority: priority || 'medium', 
+      priority: priority || 'medium',
+      label: label ? label.trim() : '',
       completed: 0, 
       created_at: new Date().toISOString() 
     });
@@ -188,7 +211,7 @@ app.get('/api/tasks/:id', (req, res) => {
 });
 
 app.put('/api/tasks/:id', (req, res) => {
-  const { title, description, priority, completed } = req.body;
+  const { title, description, priority, completed, label } = req.body;
 
   // Validate task ID
   const idValidation = validateTaskId(req.params.id);
@@ -197,8 +220,8 @@ app.put('/api/tasks/:id', (req, res) => {
   }
 
   // Validate at least one field is provided
-  if (!title && !description && !priority && completed === undefined) {
-    return res.status(400).json({ error: 'At least one field (title, description, priority, or completed) must be provided' });
+  if (!title && !description && !priority && completed === undefined && !label) {
+    return res.status(400).json({ error: 'At least one field (title, description, priority, completed, or label) must be provided' });
   }
 
   // Validate title if provided
@@ -233,7 +256,15 @@ app.put('/api/tasks/:id', (req, res) => {
     }
   }
 
-  db.updateTask(req.params.id, title, description, priority, completed, (err) => {
+  // Validate label if provided
+  if (label !== undefined) {
+    const labelValidation = validateLabel(label);
+    if (!labelValidation.valid) {
+      return res.status(400).json({ error: labelValidation.error });
+    }
+  }
+
+  db.updateTask(req.params.id, title, description, priority, completed, label, (err) => {
     if (err) {
       console.error('Error updating task:', err);
       return res.status(500).json({ error: 'Error updating task', details: err.message });

@@ -20,6 +20,7 @@
                     <option value="medium" selected>Medium Priority</option>
                     <option value="high">High Priority</option>
                 </select>
+                <input type="text" id="label" placeholder="Label (optional, e.g. Work, Personal)" maxlength="50">
                 <button type="submit">Add Task</button>
             </form>
         </div>
@@ -34,6 +35,9 @@
                             <h3><%= task.title %></h3>
                             <p><%= task.description %></p>
                             <span class="priority <%= task.priority %>"><%= task.priority %></span>
+                            <% if (task.label) { %>
+                                <span class="label-badge"><%= task.label %></span>
+                            <% } %>
                             <small><%= new Date(task.created_at).toLocaleDateString() %></small>
                         </div>
                         <button class="delete-btn">Delete</button>
