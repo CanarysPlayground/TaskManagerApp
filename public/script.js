@@ -69,7 +69,7 @@ document.addEventListener('click', async (e) => {
                     taskItem.remove();
                     const tasksList = document.getElementById('tasksList');
                     if (tasksList.children.length === 0) {
-                        loadTasks();
+                        tasksList.innerHTML = '<p class="no-tasks">No tasks yet. Create one to get started!</p>';
                     }
                 }
             } catch (error) {
@@ -92,19 +92,31 @@ async function loadTasks() {
             return;
         }
 
-        tasksList.innerHTML = tasks.map(task => `
-            <div class="task-item ${task.completed ? 'completed' : ''}" data-id="${task.id}">
+        tasksList.innerHTML = tasks.map(task => {
+            const safePriority = ['low', 'medium', 'high'].includes(task.priority) ? task.priority : 'medium';
+            return `
+            <div class="task-item ${task.completed ? 'completed' : ''}" data-id="${escapeHtml(String(task.id))}">
                 <input type="checkbox" class="task-checkbox" ${task.completed ? 'checked' : ''}>
                 <div class="task-content">
-                    <h3>${task.title}</h3>
-                    <p>${task.description}</p>
-                    <span class="priority ${task.priority}">${task.priority}</span>
+                    <h3>${escapeHtml(task.title)}</h3>
+                    <p>${escapeHtml(task.description)}</p>
+                    <span class="priority ${safePriority}">${escapeHtml(task.priority)}</span>
                     <small>${new Date(task.created_at).toLocaleDateString()}</small>
                 </div>
                 <button class="delete-btn">Delete</button>
             </div>
-        `).join('');
+        `;
+        }).join('');
     } catch (error) {
         console.error('Error loading tasks:', error);
     }
+}
+
+function escapeHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 }

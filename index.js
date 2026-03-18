@@ -65,7 +65,7 @@ const validateTaskId = (id) => {
 };
 
 // Routes
-app.get('/', (req, res) => {
+const renderTasks = (req, res) => {
   db.getAllTasks((err, tasks) => {
     if (err) {
       console.error('Error retrieving tasks:', err);
@@ -74,19 +74,12 @@ app.get('/', (req, res) => {
     }
     res.render('index', { tasks });
   });
-});
+};
+
+app.get('/', renderTasks);
 
 // Add routes for tasks: GET all tasks, POST new task
-app.get('/tasks', (req, res) => {
-    db.getAllTasks((err, tasks) => {
-        if (err) {
-            console.error('Error retrieving tasks:', err);
-            res.status(500).render('error', { message: 'Error retrieving tasks' });
-            return;
-        }
-        res.render('index', { tasks });
-    });
-});
+app.get('/tasks', renderTasks);
 
 app.post('/tasks', (req, res) => {
     const { title, description, priority } = req.body;

@@ -16,6 +16,9 @@ const initialize = () => {
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_completed ON tasks(completed)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at DESC)`);
   });
 };
 
@@ -37,12 +40,23 @@ const getTaskById = (id, callback) => {
 };
 
 const updateTask = (id, title, description, priority, completed, callback) => {
-  const sql = `
-    UPDATE tasks 
-    SET title = ?, description = ?, priority = ?, completed = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `;
-  db.run(sql, [title, description, priority, completed, id], callback);
+  const fields = [];
+  const values = [];
+
+  if (title !== undefined) { fields.push('title = ?'); values.push(title); }
+  if (description !== undefined) { fields.push('description = ?'); values.push(description); }
+  if (priority !== undefined) { fields.push('priority = ?'); values.push(priority); }
+  if (completed !== undefined) { fields.push('completed = ?'); values.push(completed); }
+
+  if (fields.length === 0) {
+    return callback(new Error('No fields to update'));
+  }
+
+  fields.push('updated_at = CURRENT_TIMESTAMP');
+  values.push(id);
+
+  const sql = `UPDATE tasks SET ${fields.join(', ')} WHERE id = ?`;
+  db.run(sql, values, callback);
 };
 
 const deleteTask = (id, callback) => {
