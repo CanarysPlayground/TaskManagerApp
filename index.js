@@ -1,6 +1,7 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const db = require('./database');
+const { factorial } = require('./factorial');
 
 const app = express();
 
@@ -256,6 +257,20 @@ app.delete('/api/tasks/:id', (req, res) => {
     }
     res.json({ message: 'Task deleted successfully' });
   });
+});
+
+// Factorial Route
+app.get('/api/factorial/:n', (req, res) => {
+  const n = parseInt(req.params.n, 10);
+  if (isNaN(n) || n < 0 || String(n) !== req.params.n) {
+    return res.status(400).json({ error: 'Input must be a non-negative integer' });
+  }
+  try {
+    const result = factorial(n);
+    res.json({ n, result });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // Error handling middleware
