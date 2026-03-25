@@ -169,22 +169,23 @@ const bulkAssignLabels = (assignments, callback) => {
   }
   
   let completed = 0;
-  let hasError = false;
+  let callbackCalled = false;
   
   assignments.forEach(({ taskId, labelId }) => {
-    if (hasError) return;
-    
     db.run(
       `INSERT OR IGNORE INTO task_labels (task_id, label_id) VALUES (?, ?)`,
       [taskId, labelId],
       (err) => {
-        if (err && !hasError) {
-          hasError = true;
+        if (callbackCalled) return;
+        
+        if (err) {
+          callbackCalled = true;
           return callback(err);
         }
         
         completed++;
-        if (completed === assignments.length && !hasError) {
+        if (completed === assignments.length) {
+          callbackCalled = true;
           callback(null);
         }
       }
@@ -198,22 +199,23 @@ const bulkRemoveLabels = (removals, callback) => {
   }
   
   let completed = 0;
-  let hasError = false;
+  let callbackCalled = false;
   
   removals.forEach(({ taskId, labelId }) => {
-    if (hasError) return;
-    
     db.run(
       `DELETE FROM task_labels WHERE task_id = ? AND label_id = ?`,
       [taskId, labelId],
       (err) => {
-        if (err && !hasError) {
-          hasError = true;
+        if (callbackCalled) return;
+        
+        if (err) {
+          callbackCalled = true;
           return callback(err);
         }
         
         completed++;
-        if (completed === removals.length && !hasError) {
+        if (completed === removals.length) {
+          callbackCalled = true;
           callback(null);
         }
       }

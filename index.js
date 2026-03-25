@@ -95,11 +95,11 @@ const validateLabelName = (name) => {
   if (!name || typeof name !== 'string') {
     return { valid: false, error: 'Label name is required and must be a string' };
   }
-  name = name.trim();
-  if (name.length === 0) {
+  const trimmedName = name.trim();
+  if (trimmedName.length === 0) {
     return { valid: false, error: 'Label name cannot be empty' };
   }
-  if (name.length > 50) {
+  if (trimmedName.length > 50) {
     return { valid: false, error: 'Label name cannot exceed 50 characters' };
   }
   return { valid: true };
