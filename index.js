@@ -228,6 +228,42 @@ app.post('/api/tasks', (req, res) => {
   });
 });
 
+// POST bulk assign labels to multiple tasks (MUST come before parameterized routes)
+app.post('/api/tasks/bulk/labels', (req, res) => {
+  const { assignments } = req.body;
+  
+  if (!assignments || !Array.isArray(assignments) || assignments.length === 0) {
+    return res.status(400).json({ error: 'assignments array is required and must not be empty' });
+  }
+  
+  // Validate all assignments
+  for (const assignment of assignments) {
+    const { taskId, labelId } = assignment;
+    
+    const taskIdValidation = validateTaskId(taskId);
+    if (!taskIdValidation.valid) {
+      return res.status(400).json({ error: `Invalid task ID in assignment: ${taskId}` });
+    }
+    
+    const labelIdValidation = validateLabelId(labelId);
+    if (!labelIdValidation.valid) {
+      return res.status(400).json({ error: `Invalid label ID in assignment: ${labelId}` });
+    }
+  }
+  
+  db.bulkAssignLabels(assignments, (err) => {
+    if (err) {
+      console.error('Error bulk assigning labels:', err);
+      // Handle foreign key constraint violation
+      if (err.message && err.message.includes('FOREIGN KEY constraint failed')) {
+        return res.status(400).json({ error: 'One or more task or label IDs are invalid' });
+      }
+      return res.status(500).json({ error: 'Error bulk assigning labels', details: err.message });
+    }
+    res.json({ message: 'Labels assigned successfully to all tasks' });
+  });
+});
+
 app.get('/api/tasks', (req, res) => {
   db.getAllTasks((err, tasks) => {
     if (err) {
@@ -460,42 +496,6 @@ app.delete('/api/tasks/:id/labels/:labelId', (req, res) => {
       return res.status(500).json({ error: 'Error removing label from task', details: err.message });
     }
     res.json({ message: 'Label removed successfully' });
-  });
-});
-
-// POST bulk assign labels to multiple tasks
-app.post('/api/tasks/bulk/labels', (req, res) => {
-  const { assignments } = req.body;
-  
-  if (!assignments || !Array.isArray(assignments) || assignments.length === 0) {
-    return res.status(400).json({ error: 'assignments array is required and must not be empty' });
-  }
-  
-  // Validate all assignments
-  for (const assignment of assignments) {
-    const { taskId, labelId } = assignment;
-    
-    const taskIdValidation = validateTaskId(taskId);
-    if (!taskIdValidation.valid) {
-      return res.status(400).json({ error: `Invalid task ID in assignment: ${taskId}` });
-    }
-    
-    const labelIdValidation = validateLabelId(labelId);
-    if (!labelIdValidation.valid) {
-      return res.status(400).json({ error: `Invalid label ID in assignment: ${labelId}` });
-    }
-  }
-  
-  db.bulkAssignLabels(assignments, (err) => {
-    if (err) {
-      console.error('Error bulk assigning labels:', err);
-      // Handle foreign key constraint violation
-      if (err.message && err.message.includes('FOREIGN KEY constraint failed')) {
-        return res.status(400).json({ error: 'One or more task or label IDs are invalid' });
-      }
-      return res.status(500).json({ error: 'Error bulk assigning labels', details: err.message });
-    }
-    res.json({ message: 'Labels assigned successfully to all tasks' });
   });
 });
 

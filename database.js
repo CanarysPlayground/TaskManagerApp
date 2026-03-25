@@ -168,32 +168,27 @@ const bulkAssignLabels = (assignments, callback) => {
     return callback(null);
   }
   
-  db.serialize(() => {
-    db.run('BEGIN TRANSACTION');
+  let completed = 0;
+  let hasError = false;
+  
+  assignments.forEach(({ taskId, labelId }) => {
+    if (hasError) return;
     
-    let completed = 0;
-    let hasError = false;
-    
-    assignments.forEach(({ taskId, labelId }) => {
-      if (hasError) return;
-      
-      db.run(
-        `INSERT OR IGNORE INTO task_labels (task_id, label_id) VALUES (?, ?)`,
-        [taskId, labelId],
-        (err) => {
-          if (err && !hasError) {
-            hasError = true;
-            db.run('ROLLBACK');
-            return callback(err);
-          }
-          
-          completed++;
-          if (completed === assignments.length && !hasError) {
-            db.run('COMMIT', callback);
-          }
+    db.run(
+      `INSERT OR IGNORE INTO task_labels (task_id, label_id) VALUES (?, ?)`,
+      [taskId, labelId],
+      (err) => {
+        if (err && !hasError) {
+          hasError = true;
+          return callback(err);
         }
-      );
-    });
+        
+        completed++;
+        if (completed === assignments.length && !hasError) {
+          callback(null);
+        }
+      }
+    );
   });
 };
 
@@ -202,32 +197,27 @@ const bulkRemoveLabels = (removals, callback) => {
     return callback(null);
   }
   
-  db.serialize(() => {
-    db.run('BEGIN TRANSACTION');
+  let completed = 0;
+  let hasError = false;
+  
+  removals.forEach(({ taskId, labelId }) => {
+    if (hasError) return;
     
-    let completed = 0;
-    let hasError = false;
-    
-    removals.forEach(({ taskId, labelId }) => {
-      if (hasError) return;
-      
-      db.run(
-        `DELETE FROM task_labels WHERE task_id = ? AND label_id = ?`,
-        [taskId, labelId],
-        (err) => {
-          if (err && !hasError) {
-            hasError = true;
-            db.run('ROLLBACK');
-            return callback(err);
-          }
-          
-          completed++;
-          if (completed === removals.length && !hasError) {
-            db.run('COMMIT', callback);
-          }
+    db.run(
+      `DELETE FROM task_labels WHERE task_id = ? AND label_id = ?`,
+      [taskId, labelId],
+      (err) => {
+        if (err && !hasError) {
+          hasError = true;
+          return callback(err);
         }
-      );
-    });
+        
+        completed++;
+        if (completed === removals.length && !hasError) {
+          callback(null);
+        }
+      }
+    );
   });
 };
 
