@@ -4,6 +4,29 @@ const db = require('./database');
 
 const app = express();
 
+// Helper function to enrich tasks with labels in a single optimized query
+// Avoids N+1 query problem by batching label fetches
+const enrichTasksWithLabels = (tasks, callback) => {
+  if (!tasks || tasks.length === 0) {
+    return callback(null, []);
+  }
+  
+  const taskIds = tasks.map(task => task.id);
+  db.getTaskLabelsOptimized(taskIds, (err, labelsByTask) => {
+    if (err) {
+      return callback(err);
+    }
+    
+    // Attach labels to each task
+    const enrichedTasks = tasks.map(task => ({
+      ...task,
+      labels: labelsByTask[task.id] || []
+    }));
+    
+    callback(null, enrichedTasks);
+  });
+};
+
 // Middleware
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -58,8 +81,47 @@ const validateCompleted = (completed) => {
 };
 
 const validateTaskId = (id) => {
-  if (!id || isNaN(parseInt(id))) {
+  if (id === undefined || id === null || id === '') {
     return { valid: false, error: 'Invalid task ID' };
+  }
+  const numId = typeof id === 'number' ? id : parseInt(id);
+  if (isNaN(numId) || numId < 1) {
+    return { valid: false, error: 'Invalid task ID' };
+  }
+  return { valid: true };
+};
+
+const validateLabelName = (name) => {
+  if (!name || typeof name !== 'string') {
+    return { valid: false, error: 'Label name is required and must be a string' };
+  }
+  const trimmedName = name.trim();
+  if (trimmedName.length === 0) {
+    return { valid: false, error: 'Label name cannot be empty' };
+  }
+  if (trimmedName.length > 50) {
+    return { valid: false, error: 'Label name cannot exceed 50 characters' };
+  }
+  return { valid: true };
+};
+
+const validateLabelColor = (color) => {
+  if (color && typeof color !== 'string') {
+    return { valid: false, error: 'Label color must be a string' };
+  }
+  if (color && !/^#[0-9A-Fa-f]{6}$/.test(color)) {
+    return { valid: false, error: 'Label color must be a valid hex color (e.g., #FF5733)' };
+  }
+  return { valid: true };
+};
+
+const validateLabelId = (id) => {
+  if (id === undefined || id === null || id === '') {
+    return { valid: false, error: 'Invalid label ID' };
+  }
+  const numId = typeof id === 'number' ? id : parseInt(id);
+  if (isNaN(numId) || numId < 1) {
+    return { valid: false, error: 'Invalid label ID' };
   }
   return { valid: true };
 };
@@ -72,7 +134,15 @@ app.get('/', (req, res) => {
       res.status(500).render('error', { message: 'Error retrieving tasks' });
       return;
     }
-    res.render('index', { tasks });
+    // Enrich tasks with labels using optimized batch query
+    enrichTasksWithLabels(tasks, (err, enrichedTasks) => {
+      if (err) {
+        console.error('Error enriching tasks with labels:', err);
+        res.status(500).render('error', { message: 'Error retrieving tasks' });
+        return;
+      }
+      res.render('index', { tasks: enrichedTasks });
+    });
   });
 });
 
@@ -158,13 +228,56 @@ app.post('/api/tasks', (req, res) => {
   });
 });
 
+// POST bulk assign labels to multiple tasks (MUST come before parameterized routes)
+app.post('/api/tasks/bulk/labels', (req, res) => {
+  const { assignments } = req.body;
+  
+  if (!assignments || !Array.isArray(assignments) || assignments.length === 0) {
+    return res.status(400).json({ error: 'assignments array is required and must not be empty' });
+  }
+  
+  // Validate all assignments
+  for (const assignment of assignments) {
+    const { taskId, labelId } = assignment;
+    
+    const taskIdValidation = validateTaskId(taskId);
+    if (!taskIdValidation.valid) {
+      return res.status(400).json({ error: `Invalid task ID in assignment: ${taskId}` });
+    }
+    
+    const labelIdValidation = validateLabelId(labelId);
+    if (!labelIdValidation.valid) {
+      return res.status(400).json({ error: `Invalid label ID in assignment: ${labelId}` });
+    }
+  }
+  
+  db.bulkAssignLabels(assignments, (err) => {
+    if (err) {
+      console.error('Error bulk assigning labels:', err);
+      // Handle foreign key constraint violation
+      if (err.message && err.message.includes('FOREIGN KEY constraint failed')) {
+        return res.status(400).json({ error: 'One or more task or label IDs are invalid' });
+      }
+      return res.status(500).json({ error: 'Error bulk assigning labels', details: err.message });
+    }
+    res.json({ message: 'Labels assigned successfully to all tasks' });
+  });
+});
+
 app.get('/api/tasks', (req, res) => {
   db.getAllTasks((err, tasks) => {
     if (err) {
       console.error('Error retrieving tasks:', err);
       return res.status(500).json({ error: 'Error retrieving tasks', details: err.message });
     }
-    res.json(tasks);
+    // Enrich tasks with labels using optimized batch query
+    enrichTasksWithLabels(tasks, (err, enrichedTasks) => {
+      if (err) {
+        console.error('Error enriching tasks with labels:', err);
+        return res.status(500).json({ error: 'Error retrieving tasks', details: err.message });
+      }
+      res.json(enrichedTasks);
+    });
   });
 });
 
@@ -255,6 +368,134 @@ app.delete('/api/tasks/:id', (req, res) => {
       return res.status(500).json({ error: 'Error deleting task', details: err.message });
     }
     res.json({ message: 'Task deleted successfully' });
+  });
+});
+
+// Label Routes
+
+// GET all labels
+app.get('/api/labels', (req, res) => {
+  db.getAllLabels((err, labels) => {
+    if (err) {
+      console.error('Error retrieving labels:', err);
+      return res.status(500).json({ error: 'Error retrieving labels', details: err.message });
+    }
+    res.json(labels);
+  });
+});
+
+// POST create a new label
+app.post('/api/labels', (req, res) => {
+  const { name, color } = req.body;
+  
+  // Validate label name
+  const nameValidation = validateLabelName(name);
+  if (!nameValidation.valid) {
+    return res.status(400).json({ error: nameValidation.error });
+  }
+  
+  // Validate color if provided
+  const colorValidation = validateLabelColor(color);
+  if (!colorValidation.valid) {
+    return res.status(400).json({ error: colorValidation.error });
+  }
+  
+  db.createLabel(name.trim(), color, (err, id) => {
+    if (err) {
+      console.error('Error creating label:', err);
+      // Handle unique constraint violation
+      if (err.message && err.message.includes('UNIQUE constraint failed')) {
+        return res.status(400).json({ error: 'A label with this name already exists' });
+      }
+      return res.status(500).json({ error: 'Error creating label', details: err.message });
+    }
+    res.status(201).json({ 
+      id, 
+      name: name.trim(), 
+      color: color || '#808080',
+      created_at: new Date().toISOString()
+    });
+  });
+});
+
+// POST assign label(s) to a task
+app.post('/api/tasks/:id/labels', (req, res) => {
+  const { labelId, labelIds } = req.body;
+  
+  // Validate task ID
+  const idValidation = validateTaskId(req.params.id);
+  if (!idValidation.valid) {
+    return res.status(400).json({ error: idValidation.error });
+  }
+  
+  // Support both single label and multiple labels
+  let labels = [];
+  if (labelId) {
+    labels = [labelId];
+  } else if (labelIds && Array.isArray(labelIds)) {
+    labels = labelIds;
+  } else {
+    return res.status(400).json({ error: 'labelId or labelIds array is required' });
+  }
+  
+  // Validate all label IDs
+  for (const lid of labels) {
+    const labelIdValidation = validateLabelId(lid);
+    if (!labelIdValidation.valid) {
+      return res.status(400).json({ error: `Invalid label ID: ${lid}` });
+    }
+  }
+  
+  // First verify the task exists
+  db.getTaskById(req.params.id, (err, task) => {
+    if (err) {
+      console.error('Error retrieving task:', err);
+      return res.status(500).json({ error: 'Error retrieving task', details: err.message });
+    }
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
+    // Prepare assignments for bulk operation
+    const assignments = labels.map(labelId => ({
+      taskId: req.params.id,
+      labelId: labelId
+    }));
+    
+    db.bulkAssignLabels(assignments, (err) => {
+      if (err) {
+        console.error('Error assigning labels to task:', err);
+        // Handle foreign key constraint violation
+        if (err.message && err.message.includes('FOREIGN KEY constraint failed')) {
+          return res.status(400).json({ error: 'One or more label IDs are invalid' });
+        }
+        return res.status(500).json({ error: 'Error assigning labels to task', details: err.message });
+      }
+      res.json({ message: 'Labels assigned successfully' });
+    });
+  });
+});
+
+// DELETE remove a label from a task
+app.delete('/api/tasks/:id/labels/:labelId', (req, res) => {
+  // Validate task ID
+  const taskIdValidation = validateTaskId(req.params.id);
+  if (!taskIdValidation.valid) {
+    return res.status(400).json({ error: taskIdValidation.error });
+  }
+  
+  // Validate label ID
+  const labelIdValidation = validateLabelId(req.params.labelId);
+  if (!labelIdValidation.valid) {
+    return res.status(400).json({ error: labelIdValidation.error });
+  }
+  
+  db.removeLabelFromTask(req.params.id, req.params.labelId, (err) => {
+    if (err) {
+      console.error('Error removing label from task:', err);
+      return res.status(500).json({ error: 'Error removing label from task', details: err.message });
+    }
+    res.json({ message: 'Label removed successfully' });
   });
 });
 
