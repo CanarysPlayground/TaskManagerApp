@@ -239,8 +239,17 @@ app.get('/api/tasks', (req, res) => {
     if (!tasksComplete || !countComplete) return;
     
     if (tasksError || countError) {
-      console.error('Error retrieving tasks:', tasksError || countError);
-      return res.status(500).json({ error: 'Error retrieving tasks', details: (tasksError || countError).message });
+      // Log both errors if both exist
+      if (tasksError && countError) {
+        console.error('Error retrieving tasks:', tasksError);
+        console.error('Error retrieving task count:', countError);
+      } else {
+        console.error('Error retrieving tasks:', tasksError || countError);
+      }
+      
+      // Return the first error that occurred
+      const error = tasksError || countError;
+      return res.status(500).json({ error: 'Error retrieving tasks', details: error.message });
     }
     
     const totalCount = countResult.count;

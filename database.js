@@ -34,17 +34,23 @@ const createTask = (title, description, priority, callback) => {
 const getAllTasks = (callback, options = {}) => {
   const { limit, offset, priority, completed } = options;
   
-  let sql = 'SELECT * FROM tasks WHERE 1=1';
+  let sql = 'SELECT * FROM tasks';
   const params = [];
+  const conditions = [];
   
   // Add filtering conditions
   if (priority !== undefined) {
-    sql += ' AND priority = ?';
+    conditions.push('priority = ?');
     params.push(priority);
   }
   if (completed !== undefined) {
-    sql += ' AND completed = ?';
+    conditions.push('completed = ?');
     params.push(completed);
+  }
+  
+  // Add WHERE clause if there are conditions
+  if (conditions.length > 0) {
+    sql += ' WHERE ' + conditions.join(' AND ');
   }
   
   // Always order by created_at DESC for consistency
@@ -107,17 +113,23 @@ const deleteTask = (id, callback) => {
 const getTaskCount = (callback, options = {}) => {
   const { priority, completed } = options;
   
-  let sql = 'SELECT COUNT(*) as count FROM tasks WHERE 1=1';
+  let sql = 'SELECT COUNT(*) as count FROM tasks';
   const params = [];
+  const conditions = [];
   
   // Add filtering conditions
   if (priority !== undefined) {
-    sql += ' AND priority = ?';
+    conditions.push('priority = ?');
     params.push(priority);
   }
   if (completed !== undefined) {
-    sql += ' AND completed = ?';
+    conditions.push('completed = ?');
     params.push(completed);
+  }
+  
+  // Add WHERE clause if there are conditions
+  if (conditions.length > 0) {
+    sql += ' WHERE ' + conditions.join(' AND ');
   }
   
   db.get(sql, params, callback);
