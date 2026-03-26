@@ -7,6 +7,7 @@ const database = {
   deleteTask: jest.fn(),
   setTaskRating: jest.fn(),
   getTaskRating: jest.fn(),
+  resetTaskRating: jest.fn(),
   createLabel: jest.fn(),
   getAllLabels: jest.fn(),
   getLabelById: jest.fn(),

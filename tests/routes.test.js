@@ -108,6 +108,28 @@ app.put('/api/tasks/:id/rating', (req, res) => {
   });
 });
 
+app.delete('/api/tasks/:id/rating', (req, res) => {
+  if (!req.params.id || isNaN(parseInt(req.params.id))) {
+    return res.status(400).json({ error: 'Invalid task ID' });
+  }
+
+  db.getTaskById(req.params.id, (err, task) => {
+    if (err) {
+      return res.status(500).json({ error: 'Error retrieving task' });
+    }
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    db.resetTaskRating(req.params.id, (err) => {
+      if (err) {
+        return res.status(500).json({ error: 'Error resetting task rating' });
+      }
+      res.json({ message: 'Task rating reset successfully' });
+    });
+  });
+});
+
 app.delete('/api/tasks/:id', (req, res) => {
   db.deleteTask(req.params.id, (err) => {
     if (err) {
@@ -853,6 +875,87 @@ describe('Task Manager API Routes', () => {
         .end((err, res) => {
           if (err) return done(err);
           expect(res.body.message).toBe('Task rating updated successfully');
+          done();
+        });
+    });
+  });
+
+  // DELETE /api/tasks/:id/rating - Reset Task Rating Tests
+  describe('DELETE /api/tasks/:id/rating - Reset Task Rating', () => {
+    test('should reset task rating successfully', (done) => {
+      db.getTaskById.mockImplementation((id, callback) => {
+        callback(null, { id: 1, title: 'Task 1', rating: 4 });
+      });
+      db.resetTaskRating.mockImplementation((id, callback) => {
+        callback(null);
+      });
+
+      request(app)
+        .delete('/api/tasks/1/rating')
+        .expect(200)
+        .end((err, res) => {
+          if (err) return done(err);
+          expect(res.body.message).toBe('Task rating reset successfully');
+          expect(db.resetTaskRating).toHaveBeenCalledWith('1', expect.any(Function));
+          done();
+        });
+    });
+
+    test('should return 404 if task not found', (done) => {
+      db.getTaskById.mockImplementation((id, callback) => {
+        callback(null, null);
+      });
+
+      request(app)
+        .delete('/api/tasks/999/rating')
+        .expect(404)
+        .end((err, res) => {
+          if (err) return done(err);
+          expect(res.body.error).toBe('Task not found');
+          done();
+        });
+    });
+
+    test('should return 400 if task ID is invalid', (done) => {
+      request(app)
+        .delete('/api/tasks/abc/rating')
+        .expect(400)
+        .end((err, res) => {
+          if (err) return done(err);
+          expect(res.body.error).toBe('Invalid task ID');
+          done();
+        });
+    });
+
+    test('should return 500 if getTaskById fails', (done) => {
+      db.getTaskById.mockImplementation((id, callback) => {
+        callback(new Error('Database error'), null);
+      });
+
+      request(app)
+        .delete('/api/tasks/1/rating')
+        .expect(500)
+        .end((err, res) => {
+          if (err) return done(err);
+          expect(res.body.error).toBe('Error retrieving task');
+          done();
+        });
+    });
+
+    test('should return 500 if resetTaskRating fails', (done) => {
+      db.getTaskById.mockImplementation((id, callback) => {
+        callback(null, { id: 1, title: 'Task 1', rating: 3 });
+      });
+      db.resetTaskRating.mockImplementation((id, callback) => {
+        callback(new Error('Database error'));
+      });
+
+      request(app)
+        .delete('/api/tasks/1/rating')
+        .expect(500)
+        .end((err, res) => {
+          if (err) return done(err);
+          expect(res.body.error).toBe('Error resetting task rating');
           done();
         });
     });

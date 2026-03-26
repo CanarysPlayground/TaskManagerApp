@@ -387,6 +387,32 @@ app.put('/api/tasks/:id/rating', (req, res) => {
   });
 });
 
+app.delete('/api/tasks/:id/rating', (req, res) => {
+  // Validate task ID
+  const idValidation = validateTaskId(req.params.id);
+  if (!idValidation.valid) {
+    return res.status(400).json({ error: idValidation.error });
+  }
+
+  db.getTaskById(req.params.id, (err, task) => {
+    if (err) {
+      console.error('Error retrieving task:', err);
+      return res.status(500).json({ error: 'Error retrieving task', details: err.message });
+    }
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    db.resetTaskRating(req.params.id, (err) => {
+      if (err) {
+        console.error('Error resetting task rating:', err);
+        return res.status(500).json({ error: 'Error resetting task rating', details: err.message });
+      }
+      res.json({ message: 'Task rating reset successfully' });
+    });
+  });
+});
+
 app.delete('/api/tasks/:id', (req, res) => {
   // Validate task ID
   const idValidation = validateTaskId(req.params.id);

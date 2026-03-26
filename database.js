@@ -93,6 +93,11 @@ const getTaskRating = (id, callback) => {
   db.get(sql, [id], callback);
 };
 
+const resetTaskRating = (id, callback) => {
+  const sql = `UPDATE tasks SET rating = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
+  db.run(sql, [id], callback);
+};
+
 // Label-related functions
 const createLabel = (name, color, callback) => {
   const sql = `INSERT INTO labels (name, color) VALUES (?, ?)`;
@@ -164,6 +169,7 @@ module.exports = {
   deleteTask,
   setTaskRating,
   getTaskRating,
+  resetTaskRating,
   createLabel,
   getAllLabels,
   getLabelById,
