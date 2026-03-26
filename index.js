@@ -1,10 +1,36 @@
 const express = require('express');
 const bodyParser = require('body-parser');
+const compression = require('compression');
 const db = require('./database');
 
 const app = express();
 
+// Simple in-memory cache for tasks
+const taskCache = new Map();
+const CACHE_TTL = 60000; // 1 minute cache TTL
+
+const getCachedTask = (id) => {
+  const cached = taskCache.get(id);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data;
+  }
+  return null;
+};
+
+const setCachedTask = (id, data) => {
+  taskCache.set(id, { data, timestamp: Date.now() });
+};
+
+const invalidateTaskCache = (id) => {
+  taskCache.delete(id);
+};
+
+const clearTaskCache = () => {
+  taskCache.clear();
+};
+
 // Middleware
+app.use(compression()); // Enable gzip compression for responses
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static('public'));
@@ -147,6 +173,10 @@ app.post('/api/tasks', (req, res) => {
       console.error('Error creating task:', err);
       return res.status(500).json({ error: 'Error creating task', details: err.message });
     }
+    
+    // Clear cache when new task is created
+    clearTaskCache();
+    
     res.status(201).json({ 
       id, 
       title: title.trim(), 
@@ -159,13 +189,84 @@ app.post('/api/tasks', (req, res) => {
 });
 
 app.get('/api/tasks', (req, res) => {
+  // Parse query parameters for pagination and filtering
+  const pageParam = req.query.page;
+  const limitParam = req.query.limit;
+  const page = pageParam ? parseInt(pageParam) : 1;
+  const limit = limitParam ? parseInt(limitParam) : 50;
+  const offset = (page - 1) * limit;
+  const priority = req.query.priority;
+  const completed = req.query.completed !== undefined ? parseInt(req.query.completed) : undefined;
+  
+  // Validate pagination parameters
+  if (isNaN(page) || page < 1 || isNaN(limit) || limit < 1 || limit > 100) {
+    return res.status(400).json({ error: 'Invalid pagination parameters. Page must be >= 1, limit must be between 1 and 100' });
+  }
+  
+  // Validate priority if provided
+  if (priority && !['low', 'medium', 'high'].includes(priority)) {
+    return res.status(400).json({ error: 'Invalid priority. Must be low, medium, or high' });
+  }
+  
+  // Validate completed if provided
+  if (completed !== undefined && ![0, 1].includes(completed)) {
+    return res.status(400).json({ error: 'Invalid completed value. Must be 0 or 1' });
+  }
+  
+  const options = { limit, offset, priority, completed };
+  
+  // Get tasks and total count in parallel
+  let tasksResult, countResult;
+  let tasksError, countError;
+  let tasksComplete = false;
+  let countComplete = false;
+  
   db.getAllTasks((err, tasks) => {
-    if (err) {
-      console.error('Error retrieving tasks:', err);
-      return res.status(500).json({ error: 'Error retrieving tasks', details: err.message });
+    tasksError = err;
+    tasksResult = tasks;
+    tasksComplete = true;
+    checkComplete();
+  }, options);
+  
+  db.getTaskCount((err, result) => {
+    countError = err;
+    countResult = result;
+    countComplete = true;
+    checkComplete();
+  }, options);
+  
+  function checkComplete() {
+    if (!tasksComplete || !countComplete) return;
+    
+    if (tasksError || countError) {
+      // Log both errors if both exist
+      if (tasksError && countError) {
+        console.error('Error retrieving tasks:', tasksError);
+        console.error('Error retrieving task count:', countError);
+      } else {
+        console.error('Error retrieving tasks:', tasksError || countError);
+      }
+      
+      // Return the first error that occurred
+      const error = tasksError || countError;
+      return res.status(500).json({ error: 'Error retrieving tasks', details: error.message });
     }
-    res.json(tasks);
-  });
+    
+    const totalCount = countResult.count;
+    const totalPages = Math.ceil(totalCount / limit);
+    
+    res.json({
+      tasks: tasksResult,
+      pagination: {
+        page,
+        limit,
+        totalCount,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1
+      }
+    });
+  }
 });
 
 app.get('/api/tasks/:id', (req, res) => {
@@ -173,6 +274,12 @@ app.get('/api/tasks/:id', (req, res) => {
   const idValidation = validateTaskId(req.params.id);
   if (!idValidation.valid) {
     return res.status(400).json({ error: idValidation.error });
+  }
+
+  // Check cache first
+  const cachedTask = getCachedTask(req.params.id);
+  if (cachedTask) {
+    return res.json(cachedTask);
   }
 
   db.getTaskById(req.params.id, (err, task) => {
@@ -183,6 +290,9 @@ app.get('/api/tasks/:id', (req, res) => {
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
+    
+    // Cache the task
+    setCachedTask(req.params.id, task);
     res.json(task);
   });
 });
@@ -238,6 +348,10 @@ app.put('/api/tasks/:id', (req, res) => {
       console.error('Error updating task:', err);
       return res.status(500).json({ error: 'Error updating task', details: err.message });
     }
+    
+    // Invalidate cache for this task
+    invalidateTaskCache(req.params.id);
+    
     res.json({ message: 'Task updated successfully' });
   });
 });
@@ -254,6 +368,10 @@ app.delete('/api/tasks/:id', (req, res) => {
       console.error('Error deleting task:', err);
       return res.status(500).json({ error: 'Error deleting task', details: err.message });
     }
+    
+    // Invalidate cache for this task
+    invalidateTaskCache(req.params.id);
+    
     res.json({ message: 'Task deleted successfully' });
   });
 });
