@@ -16,6 +16,31 @@ app.set('views', './views');
 // Initialize database
 db.initialize();
 
+// Helper function to enrich tasks with labels
+const enrichTasksWithLabels = (tasks, callback) => {
+  if (!tasks || tasks.length === 0) {
+    return callback(null, tasks);
+  }
+
+  let tasksWithLabels = [];
+  let processedCount = 0;
+
+  tasks.forEach((task, index) => {
+    db.getTaskLabels(task.id, (err, labels) => {
+      if (err) {
+        console.error('Error retrieving labels for task:', err);
+        tasksWithLabels[index] = { ...task, labels: [] };
+      } else {
+        tasksWithLabels[index] = { ...task, labels: labels || [] };
+      }
+      processedCount++;
+      if (processedCount === tasks.length) {
+        callback(null, tasksWithLabels);
+      }
+    });
+  });
+};
+
 // Validation helpers
 const validateTitle = (title) => {
   if (!title || typeof title !== 'string') {
@@ -57,9 +82,50 @@ const validateCompleted = (completed) => {
   return { valid: true };
 };
 
+const validateRating = (rating) => {
+  if (rating !== undefined && rating !== null) {
+    const ratingNum = parseInt(rating);
+    if (isNaN(ratingNum) || ratingNum < 0 || ratingNum > 5) {
+      return { valid: false, error: 'Rating must be between 0 and 5' };
+    }
+  }
+  return { valid: true };
+};
+
 const validateTaskId = (id) => {
   if (!id || isNaN(parseInt(id))) {
     return { valid: false, error: 'Invalid task ID' };
+  }
+  return { valid: true };
+};
+
+const validateLabelName = (name) => {
+  if (!name || typeof name !== 'string') {
+    return { valid: false, error: 'Label name is required and must be a string' };
+  }
+  name = name.trim();
+  if (name.length === 0) {
+    return { valid: false, error: 'Label name cannot be empty' };
+  }
+  if (name.length > 50) {
+    return { valid: false, error: 'Label name cannot exceed 50 characters' };
+  }
+  return { valid: true };
+};
+
+const validateColor = (color) => {
+  if (color && typeof color !== 'string') {
+    return { valid: false, error: 'Color must be a string' };
+  }
+  if (color && !/^#[0-9A-Fa-f]{6}$/.test(color)) {
+    return { valid: false, error: 'Color must be a valid hex color (e.g., #FF5733)' };
+  }
+  return { valid: true };
+};
+
+const validateLabelId = (id) => {
+  if (!id || isNaN(parseInt(id))) {
+    return { valid: false, error: 'Invalid label ID' };
   }
   return { valid: true };
 };
@@ -72,7 +138,19 @@ app.get('/', (req, res) => {
       res.status(500).render('error', { message: 'Error retrieving tasks' });
       return;
     }
-    res.render('index', { tasks });
+    db.getAllLabels((err, labels) => {
+      if (err) {
+        console.error('Error retrieving labels:', err);
+        labels = [];
+      }
+      enrichTasksWithLabels(tasks, (err, enrichedTasks) => {
+        if (err) {
+          console.error('Error enriching tasks:', err);
+          enrichedTasks = tasks;
+        }
+        res.render('index', { tasks: enrichedTasks, labels: labels || [] });
+      });
+    });
   });
 });
 
@@ -164,7 +242,13 @@ app.get('/api/tasks', (req, res) => {
       console.error('Error retrieving tasks:', err);
       return res.status(500).json({ error: 'Error retrieving tasks', details: err.message });
     }
-    res.json(tasks);
+    enrichTasksWithLabels(tasks, (err, enrichedTasks) => {
+      if (err) {
+        console.error('Error enriching tasks with labels:', err);
+        return res.status(500).json({ error: 'Error retrieving tasks', details: err.message });
+      }
+      res.json(enrichedTasks);
+    });
   });
 });
 
@@ -183,12 +267,17 @@ app.get('/api/tasks/:id', (req, res) => {
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
-    res.json(task);
+    enrichTasksWithLabels([task], (err, enrichedTasks) => {
+      if (err) {
+        return res.json(task);
+      }
+      res.json(enrichedTasks[0]);
+    });
   });
 });
 
 app.put('/api/tasks/:id', (req, res) => {
-  const { title, description, priority, completed } = req.body;
+  const { title, description, priority, completed, rating } = req.body;
 
   // Validate task ID
   const idValidation = validateTaskId(req.params.id);
@@ -197,8 +286,8 @@ app.put('/api/tasks/:id', (req, res) => {
   }
 
   // Validate at least one field is provided
-  if (!title && !description && !priority && completed === undefined) {
-    return res.status(400).json({ error: 'At least one field (title, description, priority, or completed) must be provided' });
+  if (!title && !description && !priority && completed === undefined && rating === undefined) {
+    return res.status(400).json({ error: 'At least one field (title, description, priority, completed, or rating) must be provided' });
   }
 
   // Validate title if provided
@@ -233,12 +322,94 @@ app.put('/api/tasks/:id', (req, res) => {
     }
   }
 
-  db.updateTask(req.params.id, title, description, priority, completed, (err) => {
+  // Validate rating if provided
+  if (rating !== undefined) {
+    const ratingValidation = validateRating(rating);
+    if (!ratingValidation.valid) {
+      return res.status(400).json({ error: ratingValidation.error });
+    }
+  }
+
+  db.updateTask(req.params.id, title, description, priority, completed, rating !== undefined ? parseInt(rating) : undefined, (err) => {
     if (err) {
       console.error('Error updating task:', err);
       return res.status(500).json({ error: 'Error updating task', details: err.message });
     }
     res.json({ message: 'Task updated successfully' });
+  });
+});
+
+app.get('/api/tasks/:id/rating', (req, res) => {
+  // Validate task ID
+  const idValidation = validateTaskId(req.params.id);
+  if (!idValidation.valid) {
+    return res.status(400).json({ error: idValidation.error });
+  }
+
+  db.getTaskRating(req.params.id, (err, result) => {
+    if (err) {
+      console.error('Error retrieving task rating:', err);
+      return res.status(500).json({ error: 'Error retrieving task rating', details: err.message });
+    }
+    if (!result) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    res.json({ rating: result.rating });
+  });
+});
+
+app.put('/api/tasks/:id/rating', (req, res) => {
+  const { rating } = req.body;
+
+  // Validate task ID
+  const idValidation = validateTaskId(req.params.id);
+  if (!idValidation.valid) {
+    return res.status(400).json({ error: idValidation.error });
+  }
+
+  // Validate rating is provided
+  if (rating === undefined || rating === null) {
+    return res.status(400).json({ error: 'Rating is required' });
+  }
+
+  // Validate rating value
+  const ratingValidation = validateRating(rating);
+  if (!ratingValidation.valid) {
+    return res.status(400).json({ error: ratingValidation.error });
+  }
+
+  db.setTaskRating(req.params.id, parseInt(rating), (err) => {
+    if (err) {
+      console.error('Error updating task rating:', err);
+      return res.status(500).json({ error: 'Error updating task rating', details: err.message });
+    }
+    res.json({ message: 'Task rating updated successfully' });
+  });
+});
+
+app.delete('/api/tasks/:id/rating', (req, res) => {
+  // Validate task ID
+  const idValidation = validateTaskId(req.params.id);
+  if (!idValidation.valid) {
+    return res.status(400).json({ error: idValidation.error });
+  }
+
+  db.getTaskById(req.params.id, (err, task) => {
+    if (err) {
+      console.error('Error retrieving task:', err);
+      return res.status(500).json({ error: 'Error retrieving task', details: err.message });
+    }
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    db.resetTaskRating(req.params.id, (err) => {
+      if (err) {
+        console.error('Error resetting task rating:', err);
+        return res.status(500).json({ error: 'Error resetting task rating', details: err.message });
+      }
+      res.json({ message: 'Task rating reset successfully' });
+    });
   });
 });
 
@@ -258,6 +429,220 @@ app.delete('/api/tasks/:id', (req, res) => {
   });
 });
 
+// Label API Routes
+// Get all labels
+app.get('/api/labels', (req, res) => {
+  db.getAllLabels((err, labels) => {
+    if (err) {
+      console.error('Error retrieving labels:', err);
+      return res.status(500).json({ error: 'Error retrieving labels', details: err.message });
+    }
+    res.json(labels || []);
+  });
+});
+
+// Create a new label
+app.post('/api/labels', (req, res) => {
+  const { name, color } = req.body;
+
+  // Validate name
+  const nameValidation = validateLabelName(name);
+  if (!nameValidation.valid) {
+    return res.status(400).json({ error: nameValidation.error });
+  }
+
+  // Validate color
+  const colorValidation = validateColor(color);
+  if (!colorValidation.valid) {
+    return res.status(400).json({ error: colorValidation.error });
+  }
+
+  db.createLabel(name.trim(), color || '#808080', (err, id) => {
+    if (err) {
+      if (err.message.includes('UNIQUE constraint failed')) {
+        return res.status(409).json({ error: 'A label with this name already exists' });
+      }
+      console.error('Error creating label:', err);
+      return res.status(500).json({ error: 'Error creating label', details: err.message });
+    }
+    res.status(201).json({ 
+      id, 
+      name: name.trim(), 
+      color: color || '#808080',
+      created_at: new Date().toISOString()
+    });
+  });
+});
+
+// Get a specific label
+app.get('/api/labels/:id', (req, res) => {
+  // Validate label ID
+  const idValidation = validateLabelId(req.params.id);
+  if (!idValidation.valid) {
+    return res.status(400).json({ error: idValidation.error });
+  }
+
+  db.getLabelById(req.params.id, (err, label) => {
+    if (err) {
+      console.error('Error retrieving label:', err);
+      return res.status(500).json({ error: 'Error retrieving label', details: err.message });
+    }
+    if (!label) {
+      return res.status(404).json({ error: 'Label not found' });
+    }
+    res.json(label);
+  });
+});
+
+// Update a label
+app.put('/api/labels/:id', (req, res) => {
+  const { name, color } = req.body;
+
+  // Validate label ID
+  const idValidation = validateLabelId(req.params.id);
+  if (!idValidation.valid) {
+    return res.status(400).json({ error: idValidation.error });
+  }
+
+  // Validate at least one field is provided
+  if (name === undefined && color === undefined) {
+    return res.status(400).json({ error: 'At least one field (name or color) must be provided' });
+  }
+
+  // Validate name if provided
+  if (name !== undefined) {
+    const nameValidation = validateLabelName(name);
+    if (!nameValidation.valid) {
+      return res.status(400).json({ error: nameValidation.error });
+    }
+  }
+
+  // Validate color if provided
+  if (color !== undefined) {
+    const colorValidation = validateColor(color);
+    if (!colorValidation.valid) {
+      return res.status(400).json({ error: colorValidation.error });
+    }
+  }
+
+  db.updateLabel(req.params.id, name ? name.trim() : undefined, color, (err) => {
+    if (err) {
+      if (err.message.includes('UNIQUE constraint failed')) {
+        return res.status(409).json({ error: 'A label with this name already exists' });
+      }
+      console.error('Error updating label:', err);
+      return res.status(500).json({ error: 'Error updating label', details: err.message });
+    }
+    res.json({ message: 'Label updated successfully' });
+  });
+});
+
+// Delete a label
+app.delete('/api/labels/:id', (req, res) => {
+  // Validate label ID
+  const idValidation = validateLabelId(req.params.id);
+  if (!idValidation.valid) {
+    return res.status(400).json({ error: idValidation.error });
+  }
+
+  db.deleteLabel(req.params.id, (err) => {
+    if (err) {
+      console.error('Error deleting label:', err);
+      return res.status(500).json({ error: 'Error deleting label', details: err.message });
+    }
+    res.json({ message: 'Label deleted successfully' });
+  });
+});
+
+// Get labels for a specific task
+app.get('/api/tasks/:taskId/labels', (req, res) => {
+  // Validate task ID
+  const taskIdValidation = validateTaskId(req.params.taskId);
+  if (!taskIdValidation.valid) {
+    return res.status(400).json({ error: taskIdValidation.error });
+  }
+
+  db.getTaskLabels(req.params.taskId, (err, labels) => {
+    if (err) {
+      console.error('Error retrieving task labels:', err);
+      return res.status(500).json({ error: 'Error retrieving task labels', details: err.message });
+    }
+    res.json(labels || []);
+  });
+});
+
+// Assign a label to a task
+app.post('/api/tasks/:taskId/labels/:labelId', (req, res) => {
+  // Validate task ID
+  const taskIdValidation = validateTaskId(req.params.taskId);
+  if (!taskIdValidation.valid) {
+    return res.status(400).json({ error: taskIdValidation.error });
+  }
+
+  // Validate label ID
+  const labelIdValidation = validateLabelId(req.params.labelId);
+  if (!labelIdValidation.valid) {
+    return res.status(400).json({ error: labelIdValidation.error });
+  }
+
+  db.assignLabelToTask(req.params.taskId, req.params.labelId, (err) => {
+    if (err) {
+      console.error('Error assigning label to task:', err);
+      return res.status(500).json({ error: 'Error assigning label to task', details: err.message });
+    }
+    res.json({ message: 'Label assigned to task successfully' });
+  });
+});
+
+// Remove a label from a task
+app.delete('/api/tasks/:taskId/labels/:labelId', (req, res) => {
+  // Validate task ID
+  const taskIdValidation = validateTaskId(req.params.taskId);
+  if (!taskIdValidation.valid) {
+    return res.status(400).json({ error: taskIdValidation.error });
+  }
+
+  // Validate label ID
+  const labelIdValidation = validateLabelId(req.params.labelId);
+  if (!labelIdValidation.valid) {
+    return res.status(400).json({ error: labelIdValidation.error });
+  }
+
+  db.removeLabelFromTask(req.params.taskId, req.params.labelId, (err) => {
+    if (err) {
+      console.error('Error removing label from task:', err);
+      return res.status(500).json({ error: 'Error removing label from task', details: err.message });
+    }
+    res.json({ message: 'Label removed from task successfully' });
+  });
+});
+
+// Get tasks by label
+app.get('/api/labels/:labelId/tasks', (req, res) => {
+  // Validate label ID
+  const labelIdValidation = validateLabelId(req.params.labelId);
+  if (!labelIdValidation.valid) {
+    return res.status(400).json({ error: labelIdValidation.error });
+  }
+
+  db.getTasksByLabel(req.params.labelId, (err, tasks) => {
+    if (err) {
+      console.error('Error retrieving tasks by label:', err);
+      return res.status(500).json({ error: 'Error retrieving tasks by label', details: err.message });
+    }
+    if (!tasks || tasks.length === 0) {
+      return res.json([]);
+    }
+    enrichTasksWithLabels(tasks, (err, enrichedTasks) => {
+      if (err) {
+        console.error('Error enriching tasks with labels:', err);
+        return res.json(tasks);
+      }
+      res.json(enrichedTasks);
+    });
+  });
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
@@ -274,6 +659,10 @@ app.use((req, res) => {
 
 // Start server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Task Manager app running on http://localhost:${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Task Manager app running on http://localhost:${PORT}`);
+  });
+}
+
+module.exports = { app, enrichTasksWithLabels };
