@@ -10,6 +10,27 @@
     <div class="container">
         <h1>📋 Task Manager</h1>
         
+        <!-- Labels Management Section -->
+        <div class="labels-section">
+            <h2>Labels</h2>
+            <div class="labels-management">
+                <div class="create-label">
+                    <h3>Create New Label</h3>
+                    <form id="labelForm">
+                        <input type="text" id="labelName" placeholder="Label name" required>
+                        <input type="color" id="labelColor" value="#808080" required>
+                        <button type="submit">Create Label</button>
+                    </form>
+                </div>
+                <div class="labels-list">
+                    <h3>Available Labels</h3>
+                    <div id="labelsList" class="labels-display">
+                        <p class="no-labels">No labels yet. Create one to get started!</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
         <div class="add-task-section">
             <h2>Add New Task</h2>
             <form id="taskForm">
@@ -20,20 +41,42 @@
                     <option value="medium" selected>Medium Priority</option>
                     <option value="high">High Priority</option>
                 </select>
+                <div class="label-selection">
+                    <label>Assign Labels:</label>
+                    <div id="labelCheckboxes"></div>
+                </div>
                 <button type="submit">Add Task</button>
             </form>
+        </div>
+
+        <!-- Filter Section -->
+        <div class="filter-section">
+            <h2>Filter Tasks</h2>
+            <div id="filterLabels" class="filter-options">
+                <button class="filter-btn active" data-label-id="all">All Tasks</button>
+            </div>
         </div>
 
         <div class="tasks-section">
             <h2>Tasks</h2>
             <div id="tasksList" class="tasks-list">
                 <% tasks.forEach(task => { %>
-                    <div class="task-item <%= task.completed ? 'completed' : '' %>" data-id="<%= task.id %>">
+                    <div class="task-item <%= task.completed ? 'completed' : '' %>" data-id="<%= task.id %>" data-labels="<%= task.labels ? task.labels.map(l => l.id).join(',') : '' %>">
                         <input type="checkbox" class="task-checkbox" <%= task.completed ? 'checked' : '' %>>
                         <div class="task-content">
                             <h3><%= task.title %></h3>
                             <p><%= task.description %></p>
                             <span class="priority <%= task.priority %>"><%= task.priority %></span>
+                            <% if (task.labels && task.labels.length > 0) { %>
+                                <div class="task-labels">
+                                    <% task.labels.forEach(label => { %>
+                                        <span class="label-badge" style="background-color: <%= label.color %>;" data-label-id="<%= label.id %>" title="<%= label.name %>">
+                                            <%= label.name %>
+                                            <button type="button" class="remove-label-btn" data-task-id="<%= task.id %>" data-label-id="<%= label.id %>">×</button>
+                                        </span>
+                                    <% }); %>
+                                </div>
+                            <% } %>
                             <div class="star-rating">
                                 <% for (let s = 1; s <= 5; s++) { %>
                                     <span class="star <%= s <= task.rating ? 'filled' : '' %>" data-rating="<%= s %>">★</span>
